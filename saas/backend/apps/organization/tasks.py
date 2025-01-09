@@ -17,6 +17,7 @@ from celery import shared_task
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from blue_krill.web.std_error import APIError
 
 from backend.apps.organization.models import SubjectToDelete, SyncErrorLog, SyncRecord
 from backend.apps.role.models import RoleGroupMember, RoleScope, RoleUser, ScopeSubject
@@ -33,6 +34,11 @@ from backend.common.lock import gen_organization_sync_lock
 from backend.component import iam, usermgr
 from backend.service.constants import SubjectType
 from backend.util.json import json_dumps
+from backend.apps.policy.models import Policy
+from backend.apps.temporary_policy.models import TemporaryPolicy
+from backend.service.models import Subject
+from backend.service.policy.query import PolicyQueryService
+from backend.common.error_codes import error_codes
 
 from .constants import SYNC_TASK_DEFAULT_EXECUTOR, SyncTaskStatus, SyncType
 
@@ -163,6 +169,9 @@ def clean_subject_to_delete():
             # 批量删除用户关系数据
             batch_delete_subject_relations(SubjectType.USER.value, usernames)
 
+            # 批量删除用户权限
+            batch_delete_subject_policy(SubjectType.USER.value, usernames)
+
         # 清理部门相关数据
         if department_ids:
             # 批量删除部门关系数据
@@ -222,3 +231,63 @@ def update_role_subject_scope(usernames: List[str], department_ids: List[str]):
 
         ScopeSubject.objects.filter(subject_type=SubjectType.USER.value, subject_id__in=usernames).delete()
         ScopeSubject.objects.filter(subject_type=SubjectType.DEPARTMENT.value, subject_id__in=department_ids).delete()
+
+
+def batch_delete_subject_policy(subject_type: str, subject_ids: List[str]):
+    # 删除权限
+    Policy.objects.filter(subject_type=subject_type, subject_id__in=subject_ids).delete()
+
+    # 清理临时权限
+    TemporaryPolicy.objects.filter(subject_type=subject_type, subject_id__in=subject_ids).delete()
+
+
+@shared_task(ignore_result=True)
+def clean_history_policy():
+    """
+    清理历史遗留权限
+    :return:
+    """
+    # 获取离职但权限还在的用户
+    usermgr_users = usermgr.list_profile()
+    username_set = {user["username"] for user in usermgr_users}
+    policies = (Policy.objects.filter(subject_type=SubjectType.USER.value).
+                exclude(subject_id__in=username_set).all())
+    subject_ids = {policy.subject_id for policy in policies}
+
+    # 获取已离职但不在待删除的用户
+    new_subject_ids = set()
+    for subject_id in subject_ids:
+        if not SubjectToDelete.objects.filter(subject_id=subject_id, subject_type=SubjectType.USER.value):
+            new_subject_ids.add(subject_id)
+    usernames = list(new_subject_ids)
+    with transaction.atomic():
+        # 删除用户所属角色的成员
+        RoleUser.objects.filter(username__in=usernames).delete()
+
+        # 批量删除用户关系数据
+        batch_delete_subject_relations(SubjectType.USER.value, usernames)
+
+        # 批量删除用户权限
+        batch_delete_subject_policy(SubjectType.USER.value, usernames)
+
+
+@shared_task(ignore_result=True)
+def clean_history_policy_by_subject_id(subject_id: str):
+    """
+    通过subject_id删除历史遗留数据
+    :return:
+    """
+
+    srv = PolicyQueryService()
+    policies = Policy.objects.filter(subject_type=SubjectType.USER.value,
+                                     subject_id=subject_id).all()
+    policy_set = set()
+    for policy in policies:
+        subject = Subject.from_username(policy.subject_id)
+        try:
+            srv.get_policy_by_id(policy.id, subject)
+        except APIError as e:
+            if e.code == error_codes.NOT_FOUND_ERROR.code:
+                policy_set.add(policy)
+    for policy in policy_set:
+        policy.delete()
