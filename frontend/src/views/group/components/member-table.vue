@@ -40,11 +40,10 @@
             </ul>
           </bk-dropdown-menu>
         </div>
-        <div class="group-member-button-item" data-test="no-leave">
+        <div class="group-member-button-item" @mouseenter="handleCascadeEnter">
           <bk-cascade
             ref="copyCascade"
             v-model="copyValue"
-            data-test="no-leave"
             :list="COPY_KEYS_ENUM"
             :clearable="false"
             :ext-popover-cls="
@@ -57,22 +56,11 @@
             :trigger="'hover'"
             :style="{ width: curLanguageIsCn ? '100px' : '140px' }"
           >
-            <div slot="option" slot-scope="{ node }" data-test="no-leave">
+            <div slot="option" slot-scope="{ node }">
               <div
-                data-test="no-leave"
-                @mouseleave="handleCascadeLeave"
-                @click="handleTriggerCopy(...arguments, node)"
-              >
-                <span
-                  v-if="node.children"
-                  data-test="no-leave"
-                  class="cascade-custom-content"
-                >
-                  {{ node.name }}
-                </span>
-                <span v-else data-test="no-leave" class="cascade-custom-content">
-                  {{ node.name }}
-                </span>
+                class="cascade-custom-content"
+                @click="handleTriggerCopy(...arguments, node)">
+                {{ node.name }}
               </div>
             </div>
           </bk-cascade>
@@ -126,7 +114,7 @@
         v-bkloading="{ isLoading: tableLoading, opacity: 1 }"
       >
         <bk-table-column type="selection" align="center" :selectable="getDefaultSelect" />
-        <template v-for="item in tableProps">
+        <template v-for="item in renderTableColumn">
           <template v-if="item.prop === 'name'">
             <bk-table-column
               :key="item.prop"
@@ -209,18 +197,6 @@
               :render-header="renderHeader"
             />
           </template>
-          <template v-else-if="item.prop === 'description'">
-            <bk-table-column
-              :key="item.prop"
-              :label="item.label"
-              :prop="item.prop">
-              <template slot-scope="{ row }">
-                <span :title="row.description">
-                  {{ row.description || '--' }}
-                </span>
-              </template>
-            </bk-table-column>
-          </template>
           <template v-else-if="item.prop === 'created_time'">
             <bk-table-column
               :key="item.prop"
@@ -238,7 +214,9 @@
               :key="item.prop"
               :label="item.label"
               :prop="item.prop"
-              :width="['memberTemplate'].includes(tabActive) ? 180 : 'auto'">
+              :width="curLanguageIsCn ? 100 : 150"
+              :fixed="'right'"
+            >
               <template slot-scope="{ row }">
                 <template v-if="['memberTemplate'].includes(routeMode)">
                   <bk-button
@@ -271,6 +249,19 @@
                     {{ $t(`m.renewal['续期']`) }}
                   </bk-button>
                 </template>
+              </template>
+            </bk-table-column>
+          </template>
+          <template v-else>
+            <bk-table-column
+              :key="item.prop"
+              :label="item.label"
+              :prop="item.prop"
+            >
+              <template slot-scope="{ row }">
+                <span :title="row">
+                  {{ row[item.prop] || '--' }}
+                </span>
               </template>
             </bk-table-column>
           </template>
@@ -397,6 +388,7 @@
       return {
         tableList: [],
         tableLoading: false,
+        isMouseCascadeEnter: false,
         currentSelectList: [],
         pagination: {
           current: 1,
@@ -454,18 +446,9 @@
         isDropdownShow: false,
         copyValue: [],
         curCopyCascade: {},
+        PERMANENT_TIMESTAMP,
         COPY_KEYS_ENUM,
         externalRoutes: ['userGroupDetail', 'memberTemplate'],
-        classNameList: [
-          'iam-user-group-member ',
-          'bk-cascade-name',
-          'bk-option-content',
-          'bk-cascade is-focus is-unselected is-default-trigger',
-          'bk-cascade-dropdown-content copy-user-group-cls',
-          'cascade-custom-content',
-          'bk-cascade-panel',
-          'bk-cascade-right bk-icon icon-angle-right'
-        ],
         groupTabList: [
           {
             name: 'userOrgPerm',
@@ -515,112 +498,116 @@
       };
     },
     computed: {
-    ...mapGetters(['user', 'externalSystemId']),
-    isNoBatchDelete () {
-      return () => {
-        const hasData = this.currentSelectList.length > 0;
-        if (
-          hasData
-          && ['userOrgPerm'].includes(this.tabActive)
-          && this.getGroupAttributes
-          && this.getGroupAttributes().source_from_role
-        ) {
-          const isAll = hasData && this.currentSelectList.length === this.userOrOrgCount;
-          this.adminGroupTitle = isAll
-            ? this.$t(`m.userGroup['管理员组至少保留一条数据']`)
-            : '';
-          return isAll;
-        }
-        return !hasData;
-      };
-    },
-    isNoBatchRenewal () {
-      return () => {
-        const emptyField = this.groupTabList.find((item) => item.name === this.tabActive);
-        if (emptyField) {
-          const hasData = emptyField.tableList.length > 0 && this.currentSelectList.length > 0;
-          if (hasData) {
-            this.selectNoRenewalList = this.currentSelectList.filter(
-              (item) => item.expired_at === PERMANENT_TIMESTAMP
-            );
-            if (this.currentSelectList.length === this.selectNoRenewalList.length) {
-              this.renewalGroupTitle = this.$t(
-                `m.userGroup['已选择的用户组成员不需要续期']`
-              );
-              return true;
-            }
+      ...mapGetters(['user', 'externalSystemId']),
+      isNoBatchDelete () {
+        return () => {
+          const hasData = this.currentSelectList.length > 0;
+          if (
+            hasData
+            && ['userOrgPerm'].includes(this.tabActive)
+            && this.getGroupAttributes
+            && this.getGroupAttributes().source_from_role
+          ) {
+            const isAll = hasData && this.currentSelectList.length === this.userOrOrgCount;
+            this.adminGroupTitle = isAll
+              ? this.$t(`m.userGroup['管理员组至少保留一条数据']`)
+              : '';
+            return isAll;
           }
           return !hasData;
-        }
-      };
-    },
-    isRatingManager () {
-      return ['rating_manager', 'subset_manager'].includes(this.user.role.type);
-    },
-    curType () {
-      return this.curData.type || 'department';
-    },
-    disabledGroup () {
-      return () => {
-        return (
-          this.getGroupAttributes
-          && this.getGroupAttributes().source_from_role
-          && (this.userOrOrgCount === 1 || (this.userOrOrgCount === this.userOrOrgPagination.count === 1))
-          && (['userOrgPerm'].includes(this.tabActive) && !this.routeMode)
-        );
-      };
-    },
-    disabledTempGroup () {
-      return () => {
-        return this.readOnly;
-      };
-    },
-    isBatchDisabled () {
-      return ['memberTemplate'].includes(this.routeMode) ? this.readOnly : !this.currentSelectList.length;
-    },
-    isCopyDisabled () {
-      return this.readOnly || (!this.groupTabList[0].tableList.length);
-    },
-    formatPagination () {
-      return () => {
-        const typeMap = {
-          userOrgPerm: () => {
-            return this.userOrOrgPagination;
-          },
-          memberTemplate: () => {
-            return this.memberPagination;
+        };
+      },
+      isNoBatchRenewal () {
+        return () => {
+          const emptyField = this.groupTabList.find((item) => item.name === this.tabActive);
+          if (emptyField) {
+            const hasData = emptyField.tableList.length > 0 && this.currentSelectList.length > 0;
+            if (hasData) {
+              this.selectNoRenewalList = this.currentSelectList.filter(
+                (item) => item.expired_at === PERMANENT_TIMESTAMP
+              );
+              if (this.currentSelectList.length === this.selectNoRenewalList.length) {
+                this.renewalGroupTitle = this.$t(
+                  `m.userGroup['已选择的用户组成员不需要续期']`
+                );
+                return true;
+              }
+            }
+            return !hasData;
           }
         };
-        return typeMap[this.tabActive]();
-      };
-    },
-    getTableList () {
-      return () => {
-        const typeMap = {
-          userOrgPerm: () => {
-            return this.groupTabList[0].tableList;
-          },
-          memberTemplate: () => {
-            return this.groupTabList[1].tableList;
-          }
+      },
+      isRatingManager () {
+        return ['rating_manager', 'subset_manager'].includes(this.user.role.type);
+      },
+      curType () {
+        return this.curData.type || 'department';
+      },
+      disabledGroup () {
+        return () => {
+          return (
+            this.getGroupAttributes
+            && this.getGroupAttributes().source_from_role
+            && (this.userOrOrgCount === 1 || (this.userOrOrgCount === this.userOrOrgPagination.count === 1))
+            && (['userOrgPerm'].includes(this.tabActive) && !this.routeMode)
+          );
         };
-        return typeMap[this.tabActive]();
-      };
-    },
-    isAdminGroup () {
-        return this.getGroupAttributes && this.getGroupAttributes().source_from_role;
-    },
-    isShowMemberTemplate () {
-        return !['staff'].includes(this.user.role.type) && !this.isAdminGroup;
-    },
-    // 蓝盾场景
-    isShowExternalMemberTemplate () {
-      return !['staff', 'rating_manager'].includes(this.user.role.type) && !this.isAdminGroup;
-    },
-    isExistMemberTemplate () {
-      return this.externalSystemId
-      ? this.isShowTab && this.isShowExternalMemberTemplate : this.isShowTab && this.isShowMemberTemplate;
-    }
+      },
+      disabledTempGroup () {
+        return () => {
+          return this.readOnly;
+        };
+      },
+      isBatchDisabled () {
+        return ['memberTemplate'].includes(this.routeMode) ? this.readOnly : !this.currentSelectList.length;
+      },
+      isCopyDisabled () {
+        return this.readOnly || (!this.groupTabList[0].tableList.length);
+      },
+      formatPagination () {
+        return () => {
+          const typeMap = {
+            userOrgPerm: () => {
+              return this.userOrOrgPagination;
+            },
+            memberTemplate: () => {
+              return this.memberPagination;
+            }
+          };
+          return typeMap[this.tabActive]();
+        };
+      },
+      getTableList () {
+        return () => {
+          const [userOrgPerm, memberTemplate] = this.groupTabList;
+          const typeMap = {
+            userOrgPerm: () => {
+              return userOrgPerm.tableList;
+            },
+            memberTemplate: () => {
+              return memberTemplate.tableList;
+            }
+          };
+          return typeMap[this.tabActive]();
+        };
+      },
+      renderTableColumn () {
+        return this.tableProps.filter((v) => v.visible);
+      },
+      isAdminGroup () {
+          return this.getGroupAttributes && this.getGroupAttributes().source_from_role;
+      },
+      isShowMemberTemplate () {
+          return !['staff'].includes(this.user.role.type) && !this.isAdminGroup;
+      },
+      // 蓝盾场景
+      isShowExternalMemberTemplate () {
+        return !['staff', 'rating_manager'].includes(this.user.role.type) && !this.isAdminGroup;
+      },
+      isExistMemberTemplate () {
+        return this.externalSystemId
+        ? this.isShowTab && this.isShowExternalMemberTemplate : this.isShowTab && this.isShowMemberTemplate;
+      }
     },
     watch: {
       'userOrOrgPagination.current' (value) {
@@ -650,7 +637,7 @@
           if (this.routeMode) {
             this.curRouteMode = _.cloneDeep(this.routeMode);
           }
-          this.tableProps = this.getTableProps(newValue);
+          this.tableProps = Object.freeze(this.getTableProps(newValue));
           if (oldValue && oldValue !== newValue) {
             this.resetPagination();
           }
@@ -658,18 +645,8 @@
         immediate: true
       }
     },
-    mounted () {
-      document.addEventListener('mouseover', this.handleCascadeEnter);
-      document.addEventListener('mouseout', this.handleCascadeLeave);
-      this.$once('hook:beforeDestroy', () => {
-        document.removeEventListener('mouseover', this.handleCascadeEnter);
-        document.removeEventListener('mouseout', this.handleCascadeLeave);
-      });
-    },
     created () {
-      this.PERMANENT_TIMESTAMP = PERMANENT_TIMESTAMP;
       this.fetchInitData();
-    // window.addEventListener('message', this.fetchReceiveData);
     },
     methods: {
       renderHeader (h, data) {
@@ -692,8 +669,20 @@
               { label: this.$t(`m.common['有效期']`), prop: 'expired_at_display' },
               { label: this.$t(`m.common['备注']`), prop: 'description' },
               { label: this.$t(`m.common['加入时间']`), prop: 'created_time' },
+              { label: this.$t(`m.perm['加入方式']`), prop: 'join_method' },
               { label: this.$t(`m.common['操作-table']`), prop: 'operate' }
-            ];
+            ].map((v) => {
+              let result = true;
+              if (['join_method'].includes(v.prop) && !['userGroupDetail'].includes(this.$route.name)) {
+                result = false;
+              }
+              return {
+                ...v,
+                ...{
+                  visible: result
+                }
+              };
+            });
           },
           memberTemplate: () => {
             return [
@@ -702,19 +691,27 @@
               { label: this.$t(`m.common['备注']`), prop: 'description' },
               { label: this.$t(`m.common['加入时间']`), prop: 'created_time' },
               { label: this.$t(`m.common['操作-table']`), prop: 'operate' }
-            ];
+            ].map((v) => {
+              return {
+                ...v,
+                ...{
+                  visible: true
+                }
+              };
+            });
           }
         };
         return tabMap[payload]();
       },
 
       getDefaultSelect () {
+        const [userOrgPerm, memberTemplate] = this.groupTabList;
         const typeMap = {
           userOrgPerm: () => {
-            return this.groupTabList[0].tableList.length > 0;
+            return userOrgPerm.tableList.length > 0;
           },
           memberTemplate: () => {
-            return this.groupTabList[1].tableList.length > 0;
+            return memberTemplate.tableList.length > 0;
           }
         };
         return typeMap[this.tabActive];
@@ -725,13 +722,6 @@
           return 'iam-table-cell-depart-cls';
         }
         return '';
-      },
-
-      // 接收iframe父页面传递的message
-      fetchReceiveData (payload) {
-        const { data } = payload;
-        console.log(data, '接受传递过来的数据');
-      // this.fetchResetData(data);
       },
 
       fetchInitData () {
@@ -967,32 +957,11 @@
         this.isDropdownShow = false;
       },
 
-      handleCascadeEnter (event) {
+      handleCascadeEnter () {
         this.$nextTick(() => {
-          if (
-            ['bk-cascade-name'].includes(event.target.className)
-            && this.$refs.copyCascade
-            && this.$refs.copyCascade.$refs.cascadeDropdown
-          ) {
-            this.$refs.copyCascade.$refs.cascadeDropdown.showHandler();
-          }
-        });
-      },
-
-      async handleCascadeLeave (event) {
-        const { className, dataset } = event.target;
-        if (dataset.test && dataset.test === 'no-leave') {
-          return;
-        }
-        this.$nextTick(() => {
-          if (
-            className
-            && !this.classNameList.includes(className)
-            && this.$refs.copyCascade
-            && this.$refs.copyCascade.$refs.cascadeDropdown
-          ) {
-          // this.$refs.copyCascade.$refs.cascadeDropdown.hideHandler();
-          }
+          this.isMouseCascadeEnter = true;
+          const copyCascade = this.$refs.copyCascade;
+          copyCascade && copyCascade.$refs.cascadeDropdown.showHandler();
         });
       },
 
@@ -1574,7 +1543,9 @@
 
 .group-member-button {
   &-item {
-    margin-right: 10px;
+    &:not(&:last-child) {
+      margin-right: 10px;
+    }
     .group-dropdown-trigger-btn {
       display: flex;
       align-items: center;

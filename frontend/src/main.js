@@ -55,6 +55,7 @@ import './common/bkmagic';
 // 全量引入自定义图标
 import './assets/iconfont/style.css';
 import '@icon-cool/bk-icon-bk-iam';
+import '@/directive';
 
 Vue.component('app-exception', Exception);
 Vue.component('app-auth', AuthComponent);
@@ -78,8 +79,6 @@ Vue.use(VueI18n);
 Vue.use(magicbox, {
   i18n: (key, args) => i18n.t(key, args)
 });
-
-console.log('start');
 
 const cn = require('./language/lang/zh');
 

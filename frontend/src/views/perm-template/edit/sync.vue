@@ -978,6 +978,7 @@
     .iam-template-sync-wrapper {
         min-height: 200px;
         .iam-template-sync-table-cls {
+            border-bottom: 0;
             .relation-content-wrapper {
                 height: 100%;
                 padding: 17px 0;

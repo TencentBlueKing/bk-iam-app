@@ -22,7 +22,7 @@
           <span class="group-name" :title="row.name" @click.stop="handleView(row)">{{ row.name }}</span>
         </template>
       </bk-table-column>
-      <bk-table-column :label="$t(`m.common['操作']`)" width="200">
+      <bk-table-column :label="$t(`m.common['操作-table']`)" width="200">
         <template slot-scope="{ row }">
           <bk-button theme="primary" text @click="handleRemove(row)">{{ $t(`m.perm['解除关联']`) }}</bk-button>
         </template>

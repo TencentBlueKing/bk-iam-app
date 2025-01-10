@@ -814,16 +814,12 @@
         if (!newVal && oldVal) {
           if (this.isBeingSearch) {
             this.infiniteTreeKey = new Date().getTime();
-            if (this.isAllFlag) {
-              this.fetchCategories(true, false);
-            } else {
-              if (this.isRatingManager) {
-                this.fetchRoleSubjectScope(true, false);
-              } else {
-                this.fetchCategories(true, false);
-              }
-            }
             this.isBeingSearch = false;
+            if (this.isAllFlag || !this.isRatingManager) {
+              this.fetchCategories(true, false);
+              return;
+            }
+            this.fetchRoleSubjectScope(true, false);
           }
         }
       },
@@ -1330,59 +1326,43 @@
         this.expiredAt = payload;
       },
 
+      async fetchManagerOrg (treeLoading = false, dialogLoading = true) {
+        await this.isRatingManager
+          ? this.fetchRoleSubjectScope(treeLoading, dialogLoading)
+          : this.fetchCategories(treeLoading, dialogLoading);
+      },
+
       async fetchMemberList () {
-        if (this.curId) {
-          try {
-            const params = {
-              id: this.curId,
-              limit: 1000,
-              offset: 0
-            };
-            let url = 'userGroup/getUserGroupMemberList';
-            if (['memberTemplate'].includes(this.routeMode)) {
-              url = 'memberTemplate/getSubjectTemplateMembers';
-            }
-            const { data } = await this.$store.dispatch(url, params);
-            const results = data.results || [];
-            this.defaultDepartments = results.filter((item) => item.type === 'department');
-            this.defaultUsers = results.filter((item) => item.type === 'user');
-            // const defaultUsers = this.defaultUsers.map((v) => {
-            //   return {
-            //     ...v,
-            //     username: v.username || v.id
-            //   };
-            // });
-            // this.hasSelectedUsers = [...this.hasSelectedUsers, ...defaultUsers];
-            // this.hasSelectedDepartments = [...this.hasSelectedDepartments, ...this.defaultDepartments];
-            if (this.isRatingManager) {
-              this.fetchRoleSubjectScope(false, true);
-            } else {
-              this.fetchCategories(false, true);
-            }
-          } catch (e) {
-            console.error(e);
-            this.messageAdvancedError(e);
-          } finally {
-            this.requestQueue.shift();
+        if (!this.curId) {
+          await this.fetchManagerOrg();
+          return;
+        }
+        try {
+          const params = {
+            id: this.curId,
+            limit: 1000,
+            offset: 0
+          };
+          let url = 'userGroup/getUserGroupMemberList';
+          if (['memberTemplate'].includes(this.routeMode)) {
+            url = 'memberTemplate/getSubjectTemplateMembers';
           }
-        } else {
-          if (this.isRatingManager) {
-            this.fetchRoleSubjectScope(false, true);
-          } else {
-            this.fetchCategories(false, true);
-          }
+          const { data } = await this.$store.dispatch(url, params);
+          const results = data.results || [];
+          this.defaultDepartments = results.filter((item) => item.type === 'department');
+          this.defaultUsers = results.filter((item) => item.type === 'user');
+          await this.fetchManagerOrg();
+        } catch (e) {
+          this.messageAdvancedError(e);
+        } finally {
+          this.requestQueue.shift();
         }
       },
 
       async fetchCategoriesList () {
         try {
-          if (this.isRatingManager) {
-            await this.fetchRoleSubjectScope(false, true);
-          } else {
-            await this.fetchCategories(false, true);
-          }
+          await this.fetchManagerOrg();
         } catch (e) {
-          console.error(e);
           this.messageAdvancedError(e);
         } finally {
           this.requestQueue.shift();
@@ -1409,14 +1389,16 @@
             child.expanded = false;
             child.disabled = false;
             child.type = child.type === 'user' ? 'user' : 'depart';
-            // child.count = child.recursive_member_count
-            child.count = child.member_count;
+            child.count = child.recursive_member_count;
             child.showCount = child.type !== 'user';
             child.async = child.child_count > 0 || child.member_count > 0;
             child.isNewMember = false;
             child.parentNodeId = '';
             if (this.isLimitSelectNode(child)) {
               child.limitOrgNodeTip = this.$t(`m.dialog['用户范围过大，请重新选择']`);
+            }
+            if (child.async && !child.count) {
+              child.count = (child.child_count || 0) + (child.member_count || 0);
             }
             if (child.type === 'user') {
               child.username = child.id;
@@ -1486,15 +1468,18 @@
                 child.isSelected = false;
                 child.expanded = false;
                 child.disabled = false;
+                child.showCount = true;
                 child.type = 'depart';
                 child.count = child.recursive_member_count;
-                child.showCount = true;
                 child.async = child.child_count > 0 || child.member_count > 0;
                 child.isNewMember = false;
                 child.parentNodeId = item.id;
                 child.full_name = `${item.name}${this.$t(`m.common['：']`)}${child.name}`;
                 if (this.isLimitSelectNode(child)) {
                   child.limitOrgNodeTip = this.$t(`m.dialog['用户范围过大，请重新选择']`);
+                }
+                if (child.async && !child.count) {
+                  child.count = (child.child_count || 0) + (child.member_count || 0);
                 }
                 if (this.hasSelectedDepartments.length) {
                   child.isSelected = this.hasSelectedDepartments.map((item) => item.id).includes(child.id);
@@ -1719,16 +1704,19 @@
               child.showRadio = true;
               child.isSelected = false;
               child.expanded = false;
-              child.disabled = this.disabled;
-              child.type = 'depart';
-              child.count = child.recursive_member_count;
               child.showCount = true;
+              child.type = 'depart';
+              child.disabled = this.disabled;
+              child.count = child.recursive_member_count;
               child.async = child.child_count > 0 || child.member_count > 0;
               child.isNewMember = false;
               child.parentNodeId = payload.id;
               child.full_name = `${payload.full_name}/${child.name}`;
               if (this.isLimitSelectNode(child)) {
                 child.limitOrgNodeTip = this.$t(`m.dialog['用户范围过大，请重新选择']`);
+              }
+              if (child.async && !child.count) {
+                child.count = (child.child_count || 0) + (child.member_count || 0);
               }
               if (this.hasSelectedDepartments.length > 0) {
                 child.isSelected = this.hasSelectedDepartments.map((item) => item.id).includes(child.id);

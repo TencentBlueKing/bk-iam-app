@@ -61,8 +61,7 @@
   .confirm-content-wrapper {
     display: flex;
     align-items: center;
-    padding-top: 8px;
-    padding-bottom: 16px;
+    padding-bottom: 8px;
     word-break: break-all;
     .warn {
       font-size: 22px;

@@ -2,29 +2,21 @@
   .user-group-member-table {
     margin-top: 16px;
     border: none;
-    tr:hover {
-      .user,
-      .depart {
-        background: #fff;
-      }
-    }
     .user,
     .depart,
     .member-template {
       padding: 4px 6px;
       background: #f0f1f5;
-      width: max-content;
       border-radius: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: max-content;
       i {
         font-size: 14px;
         color: #c4c6cc;
       }
       .name {
-        display: inline-block;
-        max-width: 350px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
         vertical-align: bottom;
       }
     }
@@ -38,6 +30,10 @@
         color: #699df4;
         cursor: pointer;
       }
+    }
+    /deep/ .bk-table-fixed,
+    /deep/ .bk-table-fixed-right {
+      border-bottom: 0;
     }
   }
 }
