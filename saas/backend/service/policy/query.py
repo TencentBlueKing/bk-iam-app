@@ -188,10 +188,8 @@ class PolicyQueryService:
             backend_policy_list = new_backend_policy_list_by_subject(db_policy.system_id, subject)
             if not backend_policy_list.get(db_policy.action_id):
                 raise error_codes.NOT_FOUND_ERROR.format(
-                    "backend policy not found, subject=%s, system_id=%d, action_id=%d",
-                    subject,
-                    db_policy.system_id,
-                    db_policy.action_id,
+                    "backend policy not found, subject=%s, system_id=%s, action_id=%s" %
+                    (subject, db_policy.system_id, db_policy.action_id)
                 )
             expired_at = backend_policy_list.get(db_policy.action_id).expired_at  # type: ignore
 
